@@ -1,3 +1,12 @@
+##### generate cost matrix #####
+x =  c(2,4,6,8,10,12)
+matrix = matrix(0, nrow = 12, ncol = 6)
+
+for (i in 1:12){
+  matrix[i,] = sample(x, 6, replace = FALSE)
+}
+
+
 ##### algorithm for zero intelligence agents #####
 # double auction
 double_auction = function(iteration, num_player){
