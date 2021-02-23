@@ -36,7 +36,8 @@ df_trade = df_trade %>% mutate(
   treatment = paste(as.character(swap_method), as.character(communication), sep = '_'),
   session_round_group_id = paste(as.character(session_code), as.character(round_number),
                                  as.character(id_in_subsession), sep = '_'),
-  value2 = ifelse(players_per_group==6, strsplit(substr(value,2,14),split=','), strsplit(substr(value,2,11),split=','))
+  value2 = ifelse(players_per_group==6, strsplit(substr(value,2,14),split=','), strsplit(substr(value,2,11),split=',')),
+  pos_diff = sender_position-receiver_position
 )
 
 # add the values for each initial position to the trade data
@@ -73,6 +74,12 @@ df_session = df_session %>% mutate(
   avg_efficient_pay = ifelse(group_size==5, 22, 30.33)
 )
 
+# add senders' and receivers' value to trade data
+df_trade = df_trade %>% mutate(
+  sender_value = ifelse(senderID==1, p1_value, ifelse(senderID==2, p2_value, ifelse(senderID==3, p3_value, ifelse(senderID==4, p4_value, ifelse(senderID==5, p5_value, p6_value))))),
+  receiver_value = ifelse(receiverID==1, p1_value, ifelse(receiverID==2, p2_value, ifelse(receiverID==3, p3_value, ifelse(receiverID==4, p4_value, ifelse(receiverID==5, p5_value, p6_value)))))
+)
+
 # remove practice rounds and temporary datasets
 df_session = filter(df_session, practice == FALSE | practice == 'False')
 df_trade = filter(df_trade, practice == FALSE | practice == 'False')
@@ -82,8 +89,9 @@ rm(df_temp)
 ##### Summary stats #####
 # create summary table
 treatmenttype = unique(df_trade$treatment)
-summary = matrix(NA, nrow = 2, ncol = 4)
-rownames(summary) = c('accept rate', 'efficiency')
+summary = matrix(NA, nrow = 6, ncol = 4)
+rownames(summary) = c('accept rate', 'efficiency', 'num of asks', 'num of messages', 
+                      'num of groups', 'avg position diff')
 colnames(summary) = treatmenttype
 
 # loop over treatments to fill out the table
@@ -100,6 +108,14 @@ for (i in 1:length(treatmenttype)){
   actual_pay = sum(df_treat_session$net_payoff)
   max_pay = sum(df_treat_session$avg_efficient_pay)
   summary[2,i] = round(actual_pay/max_pay, digits = 3)
+  
+  # calculate the rest of the tables
+  summary[3,i] = accept + reject
+  df_temp = filter(df_treat, message != 'N/A' & message != '')
+  summary[4,i] = length(df_temp$round_number)
+  summary[5,i] = length(unique(df_treat$session_round_group_id))
+  df_temp = filter(df_treat, event_type == 'request')
+  summary[6,i] = mean(df_temp$pos_diff)
 }
 xtable(summary)
 
@@ -119,5 +135,15 @@ df_message_swap = filter(df_trade, swap_method == 'swap' & communication == 'Mes
 df_message_tl = filter(df_trade, swap_method == 'TL' & communication == 'Message' & message != 'N/A' & message != '')
 
 # remove temporary datasets
-rm(summary, df1, df2, df3, df4, df_message_swap, df_message_tl, df_treat, df_treat_session)
+rm(summary, df1, df2, df3, df4, df_message_swap, df_message_tl, df_treat, df_treat_session, df_temp)
 
+
+##### TL: Shading between sender and receiver #####
+df_tl = filter(df_trade, swap_method == 'TL' & event_type == 'accept')
+df_tl = df_tl %>% mutate(
+  requestee_power = (offer/pos_diff - sender_value)/(receiver_value-sender_value),
+  requester_power = (receiver_value - offer/pos_diff)/(receiver_value-sender_value)
+)
+df_tl = filter(df_tl, requestee_power>=0 & requester_power>=0)
+hist(df_tl$requestee_power[df_tl$communication=='Message'], breaks = 10)
+hist(df_tl$requester_power[df_tl$communication=='Message'], breaks = 10)
